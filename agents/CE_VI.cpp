@@ -501,7 +501,7 @@ void CE_VI::TB(unsigned state)
         {
             cout << "BUG: RESULT OF MDP("<< weight<< ") IS IN QUADRANT III"<<endl;
             cout << "defend:" << defend0<<","<<defend1<<endl;
-            cout <<"strat:" <<sumActions0 <<","<< sumActions1<<endl;
+            cout <<"strategy:" <<sumActions0 <<","<< sumActions1<<endl;
             cout << "State:" << state<<endl;
             exit(1);
         }
