@@ -1,0 +1,15 @@
+;; Object environments/
+;; SEMANTICDB Tags save file
+(semanticdb-project-database-file "environments/"
+  :tables (list 
+   (semanticdb-table "GridWorldWall.cpp"
+    :major-mode 'c++-mode
+    :tags '(("iostream" include (:system-flag t) nil [20 39]) ("sstream" include (:system-flag t) nil [40 58]) ("assert.h" include (:system-flag t) nil [59 78]) ("GridWorldWall.h" include nil nil [98 124]) ("GridWorldWall" function (:constructor-flag t :parent "GridWorldWall" :arguments (("game" variable (:type "char") (reparse-symbol arg-sub-list) [242 252])) :type ("GridWorldWall" type "class")) nil [213 2994]) ("GridWorldWall" function (:destructor-flag t :parent "GridWorldWall" :type "void") nil [2996 3030]) ("SetHWall" function (:parent "GridWorldWall" :arguments (("col1" variable (:type "unsigned int") (reparse-symbol arg-sub-list) [3062 3076]) ("row1" variable (:type "unsigned int") (reparse-symbol arg-sub-list) [3077 3091]) ("col2" variable (:type "unsigned int") (reparse-symbol arg-sub-list) [3092 3106]) ("row2" variable (:type "unsigned int") (reparse-symbol arg-sub-list) [3107 3121]) ("lenght" variable (:type "unsigned int") (reparse-symbol arg-sub-list) [3122 3138])) :type "void") nil [3032 3514]) ("SetVWall" function (:parent "GridWorldWall" :arguments (("col1" variable (:type "unsigned int") (reparse-symbol arg-sub-list) [3546 3560]) ("row1" variable (:type "unsigned int") (reparse-symbol arg-sub-list) [3561 3575]) ("col2" variable (:type "unsigned int") (reparse-symbol arg-sub-list) [3576 3590]) ("row2" variable (:type "unsigned int") (reparse-symbol arg-sub-list) [3591 3605]) ("lenght" variable (:type "unsigned int") (reparse-symbol arg-sub-list) [3606 3622])) :type "void") nil [3516 3999]) ("GenerateTransitionModel" function (:parent "GridWorldWall" :type "void") nil [4001 14538]) ("PurgeStatesWalls" function (:parent "GridWorldWall" :arguments (("state1" variable (:type ("vector" type (:type "class") nil nil)) (reparse-symbol arg-sub-list) [14590 14614]) ("st2" variable (:type ("vector" type (:type "class") nil nil)) (reparse-symbol arg-sub-list) [14615 14636]) ("prob" variable (:pointer 1 :type "float") (reparse-symbol arg-sub-list) [14637 14649])) :type ("vector" type (:type "class") nil nil)) nil [14540 17403]) ("Reward" function (:parent "GridWorldWall" :arguments (("agent" variable (:type "unsigned int") (reparse-symbol arg-sub-list) [17433 17448]) ("s" variable (:type "unsigned int") (reparse-symbol arg-sub-list) [17449 17460]) ("actions" variable (:type "unsigned int") (reparse-symbol arg-sub-list) [17461 17478])) :type "float") nil [17405 22158]))
+    :file "GridWorldWall.cpp"
+    :pointmax 22160
+    )
+   )
+  :file "semantic.cache"
+  :semantic-tag-version "2.0pre3"
+  :semanticdb-version "2.0pre3"
+  )

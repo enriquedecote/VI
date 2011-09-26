@@ -1,0 +1,663 @@
+#include <iostream>
+#include <iomanip>
+#include <sstream>
+#include <string>
+#include <fstream>
+#include <math.h>
+#include <cmath>
+#include <fstream>
+#include <stdlib.h>
+#include "glpk.h"
+#include "../include/CE_VI.h"
+
+using namespace std;
+
+CE_VI::CE_VI(string name,
+	     unsigned int pos,
+	     unsigned int numAgents,
+	     VariablesInfo*const admissibleActions,
+	     float discountFactor,
+	     float maxReward,
+	     bool isVerbose,
+	     Environment* environment) : VI(name,
+	     pos,
+	     numAgents,
+	     admissibleActions,
+	     discountFactor,
+	     maxReward,
+	     isVerbose,
+	     environment)
+	     
+	     {
+	mNumAgents = numAgents;
+ 	mDiscountFactor = mdiscountFactor;
+	mpEnvironment = (GridWorld*)environment;
+	mNumActions = admissibleActions->size();;
+	cout << "admissibleActions: " << mNumActions << endl;
+	mNumJointActions = (unsigned) pow((float)mNumActions, (float)numAgents);
+	mNumStates = mpEnvironment->Size();
+	for (unsigned i = 0; i< mNumStates; i++)
+	{
+		mJointVTable[i].first = 0.0;
+		mJointVTable[i].second = 0.0;
+	}
+}
+
+
+
+CE_VI::~CE_VI () {
+	cout << "CE_VI::~CE_VI" << endl;
+}
+
+void CE_VI::SetTransitionModel (const TransitionModel*const pTransitionModel)
+{
+  mpTransitionModel = (TransitionModel*)pTransitionModel;
+}
+
+void CE_VI::Update(float payoff, VariablesInfo* stateDescription) {
+ 
+}
+
+
+void CE_VI::UpdateValue (float* rNewValue,  float payoff,  float bestValue) {
+  //if (learningRate <= 0.0)
+  //	learningRate = mLearningRate;
+  *rNewValue = 0;//(1-learningRate)*(*rNewValue) + learningRate*(payoff + mDiscountFactor*bestValue);
+}
+
+float CE_VI::ComputeVI ( )
+{
+    float error = 0.0;
+    unsigned T =0;
+	pair <float,float> r;
+	pair <float,float> sumNextState(0.0,0.0);
+	pair <float,float> nextQ(0.0,0.0);
+	ofstream fout( "/home/enrique/Projects/results/VI/VI.log", ios::app );
+ 
+	do
+	{	
+		//cout << endl << "**************START OF TRIAL**************" << endl<<endl;
+	// (1) 
+	    for (unsigned i = 0; i < mNumStates; i++)// for all states
+	      {
+	      	//cout << "State:" << i;
+	      	map <unsigned, pair<float,float> > payoff;
+			for (unsigned j=0; j < mNumJointActions; j++)//for all actions
+			  {
+			  	  
+			  	  //cout << " ->action:" << j;
+			  	  r.first = mpEnvironment->Reward(0,i,j);  
+			  	  r.second = mpEnvironment->Reward(1,i,j);
+			  	  for(unsigned x = 0; x<mNumStates; x++)//next state
+			  	  {
+			  	  	sumNextState.first += mpTransitionModel->GetProb(i,j,x)*mJointVTable[x].first;
+			  	  	sumNextState.second += mpTransitionModel->GetProb(i,j,x)*mJointVTable[x].second;
+			  	  	/*if(i == 52&& j==10)
+			  	  	{
+			  	  		cout << endl<<"Rewards (" << r.first<<","<<r.second<<")"<<endl;
+			  	  		//vector <unsigned> temp = mpEnvironment->GetFromIndex(i,4,3);
+			  	  		cout << endl<<"State " << i <<"->"<<x;
+			  	  		cout << ": "<< mJointVTable[x].first;
+			  	  		cout << "(" << mpTransitionModel->GetProb(i,j,x)<< ")";
+			  	  		//cout << ": " <<temp.at(0)<< "," <<temp.at(1)<< "," <<temp.at(2)<< "," <<temp.at(3)<< endl;
+			  	  		//cout << " ->action:" << j;
+			  	  		//vector <unsigned> temp2 = mpEnvironment->GetFromIndex(j,2,4);
+	      				//cout << ":" << temp2.at(0) << ","<< temp2.at(1) << endl;
+	      				cout << "(" << sumNextState.first << "," << sumNextState.second << ")" << endl;
+			  	  	}*/
+			  	  	//cout << "(" << sumNextState.first << "," << sumNextState.second << ")" << endl;
+			  	  }
+			  	  
+			  	  nextQ.first = r.first + mDiscountFactor*sumNextState.first ;
+			  	  nextQ.second = r.second + mDiscountFactor*sumNextState.second;
+			  	  //if(i == 52 && j==10)
+			  	  //	cout << endl<<"nextQ.first: "<<nextQ.first <<";  nextQ.second: "<<nextQ.second;
+				  payoff[j] = nextQ;		
+				  sumNextState.first = 0;
+				  sumNextState.second = 0;
+				 
+			  }//end all actions
+			  mJointQTable[i] = payoff;
+			  
+	      }
+	
+	 // (2)  
+	 //cout << "Qtable:" << endl << PrintQTable();	
+	 //cout << " "<<mpTransitionModel->ToString(1);
+	 //LPsolve();
+	 //cout << endl<<"**V(s) update**" << endl ;
+	 //DebugStateIndex();
+	 for (unsigned i = 0; i < mNumStates; i++)// for all states
+	 {
+	 	//cout<< "State:" << i << endl;
+	 	//Friend(i); 
+	 	//UtilitarianCE(i);
+	 	MiniMax(i);
+	 }
+	
+	 
+	 //fout << "Probs:" << endl << PrintJointStrat();
+	 // (3)  
+	 	vector <unsigned> jointMoves;
+	 	pair <float, float> sumActions;
+	 	sumActions.first = 0.0;
+	 	sumActions.second = 0.0; 
+		for (unsigned i = 0; i < mNumStates; i++)// for all states
+		{
+			jointMoves = mpEnvironment->AvailJointMoves(i);
+			for (unsigned j = 0; j<mNumJointActions;j++)
+			{
+				sumActions.first += mJointStrat[i][j]*mJointQTable[i][j].first;
+				sumActions.second += mJointStrat[i][j]*mJointQTable[i][j].second;
+				//fout <<"p("<<i<<","<<j<<"):"<<mJointStrat[i][j]<<endl;
+				/*if (mJointStrat[i][j] != 0.0)
+				{
+					vector <unsigned> state = mpEnvironment->GetFromIndex(i,4,3);
+					vector <unsigned> move = mpEnvironment->GetFromIndex(j,2,4);
+					cout <<"state " << i << ": " <<state[0]<<","<<state[1]<<","<<state[2]<<","<<state[3]<<endl;
+					cout <<"move " << j << ": " <<move[0]<<","<<move[1]<<endl;
+					cout << "V("<<i<<","<<j<<")= "<<sumActions.first<<","<<sumActions.second<<endl;
+				} */
+			}
+			mJointVTable[i].first = sumActions.first;
+			mJointVTable[i].second = sumActions.second;
+			sumActions.first = 0;
+			sumActions.second = 0;
+		}
+		T++;
+	}while(T<10);
+	
+	cout << "Qtable:" << endl << PrintQTable();	
+    cout <<  "Vtable:"<<endl<<PrintVTable();
+    fout.close();
+    return error;
+}
+
+void CE_VI::Friend(unsigned state)
+{
+	vector <unsigned> jointMoves;
+	map <unsigned, float> bestMoves1;
+	map <unsigned, float> bestMoves2;
+	float bestActionVal1 = -100;
+	float bestActionVal2 = -100;
+	float tempVal = -100;
+	unsigned jointMove = 0;
+	unsigned action = 0;
+	map<unsigned, float>::iterator it1;
+	map<unsigned, float>::iterator it2;
+	
+	//if(state==52)
+	//	cout << "STATE " << state << endl;
+	jointMoves.clear();
+	jointMoves = mpEnvironment->AvailJointMoves(mpEnvironment->GetFromStateIndex(state,4,3));
+	while(!jointMoves.empty())
+	{
+		jointMove = jointMoves.back();
+		jointMoves.pop_back();
+		for(unsigned j =0; j<2;j++)
+		{
+			if(j==0)
+			{
+				
+				tempVal = mJointQTable[state][jointMove].first;
+				//if(state==52)
+				//	cout <<"jointAction: " << jointMove<< endl<<"REWARD: "<<tempVal<<endl;
+				if(tempVal > bestActionVal1)
+				{
+					bestMoves1.clear();
+					assert(bestMoves1.empty());
+					action = (unsigned)mpEnvironment->GetFromIndex(jointMove,2,4)[0];
+					bestActionVal1 = tempVal;
+					bestMoves1[action] = 0.0;
+					//if(state==52)
+					//	cout << "1: bestAction: "<<action<<": "<<bestActionVal1<< endl;
+				}
+				else 
+				{
+					if(tempVal == bestActionVal1)
+					{
+						action = (unsigned)mpEnvironment->GetFromIndex(jointMove,2,4)[0];
+						//if(state==52)
+						//	cout << "1: bestAction: "<<action<<": "<<bestActionVal1<< endl;
+						it1 = bestMoves1.find(action);
+						if(it1== bestMoves1.end())
+							bestMoves1[action]= bestActionVal1;
+					}
+				}
+			}//agent 2
+			else
+			{
+				tempVal = mJointQTable[state][jointMove].second;
+				if(tempVal > bestActionVal2)
+				{
+					bestMoves2.clear();
+					assert(bestMoves2.empty());
+					action = mpEnvironment->GetFromIndex(jointMove,2,4)[1];
+					bestActionVal2 = tempVal;
+					bestMoves2[action] = 0.0;
+					//if(state==52)
+					//	cout << "2: bestAction: "<<action<<": "<<bestActionVal2<< endl;
+				}
+				else 
+				{
+					if(tempVal == bestActionVal2)
+					{
+						action = mpEnvironment->GetFromIndex(jointMove,2,4)[1];
+						//if(state==52)
+						//	cout << "2: bestAction: "<<action<<": "<<bestActionVal2<< endl;
+						it2 = bestMoves2.find(action);
+						if(it2== bestMoves2.end())
+							bestMoves2[action] = bestActionVal2;
+					}
+				}
+			}
+		}//for each agent
+	}//for each joint action
+	
+	/*if(state==52)
+	{
+		cout << "1: Num. best moves: "<< bestMoves1.size()<< endl;
+		cout << "2: Num. best moves: "<< bestMoves2.size()<< endl;
+	}*/
+	//make the probability distribution
+	for(it1 = bestMoves1.begin(); it1!= bestMoves1.end();it1++)
+		bestMoves1[it1->first] = 1/(float)bestMoves1.size();
+	for(it2 = bestMoves2.begin(); it2!= bestMoves2.end();it2++)
+		bestMoves2[it2->first] = 1/(float)bestMoves2.size();
+
+	
+	for(unsigned i = 0; i<mNumJointActions; i++)
+	{
+		mJointStrat[state][i]= 0.0;
+	}//end for i
+	
+	//make the joint strategy prob distribution	
+	for(it1 = bestMoves1.begin(); it1!= bestMoves1.end();it1++)
+	{
+		for(it2 = bestMoves2.begin(); it2!= bestMoves2.end();it2++)
+		{
+			jointMoves.clear();
+			assert(jointMoves.empty());
+			jointMoves.push_back(it1->first);
+			jointMoves.push_back(it2->first);
+			mJointStrat[state][mpEnvironment->ComputeJointIndex(jointMoves,4)]= it1->second*it2->second;
+			/*if(state==52)
+			{
+				cout << "JointMove "<< mpEnvironment->ComputeJointIndex(jointMoves,4);
+				cout << " ("<< it1->first<<","<<it2->first<<"): "<<it1->second*it2->second << endl;
+			}*/
+		}
+	}
+}
+
+void CE_VI::UtilitarianCE(unsigned state)
+{
+	LPX *lp;
+    int ia[1+1000], ja[1+1000];
+    double ar[1+1000], Z;
+    float Qsum = 0;
+    bool isNonZero = false;
+    vector <unsigned> jointMoves;
+    unsigned jointMove;
+    vector <unsigned> lieMoves;
+    vector <unsigned> jointMovesLie;
+    vector <unsigned> ones;//for the prob dist constraint
+    unsigned jointMoveLie;
+    unsigned index = 1; 
+    unsigned const numConstrains = mNumActions*(mNumActions-1)*mNumAgents;
+    string str("");
+    
+   	lp = lpx_create_prob();
+  	lpx_set_prob_name(lp, "jointPolicy");
+  	lpx_set_obj_dir(lp, LPX_MAX);
+
+//each equilibrium constraint represents one row (A x (A-1) x N)= 24
+//here we set up the limits of each row (this depends on the Q-values)
+   	lpx_add_rows(lp, numConstrains); 	
+   	unsigned temp = 1;
+   	for(unsigned i=0; i<mNumActions*(mNumActions-1); i++)
+   	{
+   		for(unsigned n = 0; n < mNumAgents; n++)
+   		{
+   			str.append<int>(1,n+48);  
+	   		str.append<int>(1,i+97);
+	   		lpx_set_row_name(lp, temp, str.data());
+			lpx_set_row_bnds(lp, temp, LPX_LO, 0.0, 0.0);
+			str.clear();
+			temp++;
+   		}
+   	}
+   	
+   	/*lpx_add_rows(lp, 1);
+   	lpx_set_row_name(lp, numConstrains+1, "probDist");
+	lpx_set_row_bnds(lp, numConstrains+1, LPX_FX, 1.0, 1.0);*/
+   	
+//here we set the limits of the independent variables (all joint probabilities),
+//as well as their coeficients in the objective function
+	lpx_add_cols(lp, mNumJointActions);
+	for(unsigned i=0; i<mNumJointActions; i++)
+	{ 
+		str.append("pi_");
+   		str.append<int>(1,i+97);   			
+		lpx_set_col_name(lp, i+1, str.data());
+		lpx_set_col_bnds(lp, i+1, LPX_DB, 0.0, 1.0);//the [0,1] bounds on each prob
+	//this is what realy changes with each flavor of CE
+		lpx_set_obj_coef(lp, i+1, mJointQTable[state][i].first+mJointQTable[state][i].second);
+		str.clear();
+	}
+
+//here we set the coeficients of all constraint ia[] controlls the rows (contraint index)
+//ja[]controls the cols (each joint prob), ar[] is the value for that coeficient
+   	for(unsigned n=0; n<mNumAgents;n++)
+   	{
+   		//cout << "*agent:" << n<< endl;
+	   	for(unsigned i=0; i<mNumActions;i++)//my action
+	   	{
+	   		//cout<<"**action:" << i<< endl;
+	   		for(unsigned k=0;k < mNumActions;k++){ if(k != i) lieMoves.push_back(k); }
+	   		
+	   		while(!lieMoves.empty())//my lie
+	   		{
+	   			//cout<< "***lie:" << lieMoves.back()<<endl;
+	   			for(unsigned j=0; j<mNumActions;j++)//opponent's move
+	   			{
+	   				jointMoves.clear();
+	   				jointMovesLie.clear();
+		   			jointMoves.push_back(i);
+		   			jointMoves.push_back(j);
+		   			jointMovesLie.push_back(lieMoves.back());
+		   			jointMovesLie.push_back(j);
+		   			
+		   			jointMove = mpEnvironment->ComputeJointIndex(jointMoves,4);
+		   			jointMoveLie = mpEnvironment->ComputeJointIndex(jointMovesLie,4);
+		   			
+	   				if(n == 0)
+	   				{
+	   					Qsum = mJointQTable[state][jointMove].first - mJointQTable[state][jointMoveLie].first; /* a[1,1] =  1 */
+	   					if(Qsum != 0) 
+	   					{
+	   						isNonZero = true;
+	   						ia[index] = index, ja[index] = jointMove+1; 
+	   						ar[index] =  Qsum;
+	   						//cout << "Q"<<n<<"("<<state<<","<<jointMove<<"):"<<mJointQTable[state][jointMove].first;
+		   					//cout<< " - " << "Q"<<n<<"("<<state<<","<<jointMoveLie<<"):"<<mJointQTable[state][jointMoveLie].first<<endl;
+		   					//cout << "NONZERO:" << index<< endl;
+	   					}
+	   				}
+	   				else if(n == 1)
+	   					Qsum =  mJointQTable[state][jointMove].second - mJointQTable[state][jointMoveLie].second; /* a[1,1] =  1 */
+	   					if(Qsum != 0)
+	   					{ 
+	   						isNonZero = true;
+	   						ia[index] = index, ja[index] = jointMove+1;
+	   						ar[index] = Qsum;
+	   						//cout << "Q"<<n<<"("<<state<<","<<jointMove<<"):"<<mJointQTable[state][jointMove].second;
+		   					//cout<< " - " << "Q"<<n<<"("<<state<<","<<jointMoveLie<<"):"<<mJointQTable[state][jointMoveLie].second<<endl;
+		   					//cout << "NONZERO:" << index<< endl;
+	   					}
+		   			//cout << "Q"<<n<<"("<<state<<","<<jointMove<<"):"<<mJointQTable[state][jointMove].first;
+		   			//cout<< " - " << "Q"<<n<<"("<<state<<","<<jointMoveLie<<"):"<<mJointQTable[state][jointMoveLie].first<<endl;
+	   			}//for all opponent actions
+	   			if(isNonZero) index++;
+	   			lieMoves.pop_back();
+	   			isNonZero = false;
+	   		}//for each lie
+	   	}//for each of my actions
+   	}
+   	
+   	//for the prob distr constraint
+   	//index++;
+   	//for(unsigned i=0; i<mNumJointActions;i++)
+   	//	ia[index] = index, ja[index] = i+1, ar[index] = 1.0;
+   	
+	lpx_load_matrix(lp, index-1, ia, ja, ar);
+	lpx_simplex(lp);
+	Z = lpx_get_obj_val(lp);
+	//cout << "Z = " << Z << endl;
+	if(index>1)
+	{
+		//cout << "STATE:" <<state << endl;
+		for(unsigned i=0; i<mNumJointActions;i++)
+		{
+			if(lpx_get_col_prim(lp, i+1)== 1) 
+	 			ones.push_back(i);
+
+	 		if(!ones.empty())
+	 		{
+			 	unsigned any = rand() % ones.size();
+			 	unsigned jointA = ones.at(any);
+			 	for(unsigned j=0; j< mNumJointActions; j++)
+			 	{
+			 		if(j == jointA) mJointStrat[state][j] = 1;
+			 		else mJointStrat[state][j] = 0;
+			 	}
+			 	ones.clear();
+	 		}
+		}
+			//cout << i<<":"<<lpx_get_col_prim(lp, i+1)<<" ";
+	}
+	else
+	{
+		for(unsigned j=0; j< mNumJointActions; j++)
+			mJointStrat[state][j] = 1/(float)mNumJointActions;
+	}
+	 	
+	lpx_delete_prob(lp);
+}
+
+void CE_VI::MiniMax(unsigned state)
+{
+     LPX *lp;
+     stringstream ss;
+     string str;
+     
+     int ia[1+500];
+     int ja[1+500];
+     double ar[1+500];
+     int k;
+     
+     vector <unsigned int> jointMove(2,0);
+     int index;
+     
+     double pi[2][1+500];
+     
+     for(int agent = 0; agent<2; agent++) {
+     
+          lp = lpx_create_prob();
+          glp_set_prob_name(lp, "minimax");
+          glp_set_obj_dir(lp, GLP_MAX);
+     
+          /* add row bounds or bounds for each constraint */
+          glp_add_rows(lp, mNumActions);
+          for(int i=1; i< mNumActions+1; i++) {
+                  ss << "p" << i;
+                  str = ss.str();
+                  glp_set_row_name(lp, i, str.c_str()); 
+                  glp_set_row_bnds(lp, i, GLP_LO, 0.0, 0.0);
+          }
+     
+          /* add cols bounds */
+          glp_add_cols(lp, mNumActions+1);
+          for(int i=1; i< mNumActions+1; i++) {
+                  ss << "x" << i;
+                  str = ss.str();
+                  glp_set_col_name(lp, i, str.c_str()); 
+                  glp_set_col_bnds(lp, i, GLP_LO, 0.0, 0.0);
+                  glp_set_obj_coef(lp, i, 0.0);
+          }
+     
+          ss << "v";
+          str = ss.str();
+          glp_set_col_name(lp, mNumActions+1, str.c_str()); 
+          glp_set_col_bnds(lp, mNumActions+1, GLP_FR, 0.0, 0.0);
+          glp_set_obj_coef(lp, mNumActions+1, 1.0);
+     
+          /* setup matix of coefficients*/
+          k = 1;
+          for(int i = 1; i<mNumActions+1; i++) {
+                  for(int j = 1; j<mNumActions+1; j++) {
+                          ia[k] = i; ja[k] = j; 
+                     
+                          // compute joint index
+                          jointMove.push_back(i-1);
+		                  jointMove.push_back(j-1);
+		                  index = mpEnvironment->ComputeJointIndex(jointMove, 4);
+                     
+                          ar[k] = mJointQTable[state][index].first;
+                          k++;
+                     
+                          jointMove.clear();
+                  }
+          }
+     
+          glp_load_matrix(lp, k, ia, ja, ar);
+     
+          lpx_simplex(lp);
+
+          for(int i = 1; i<mNumActions+1; i++) {
+                  /* get strategy */
+                  pi[agent][i] = glp_get_col_prim(lp, i);
+          }
+     
+          glp_delete_prob(lp);
+     }
+     
+     // compute joint strategy
+     for(int i=0; i<mNumActions; i++) {
+             for(int j=0; j<mNumActions; j++) {
+             
+                     // compute joint index
+                     jointMove.push_back(i);
+                     jointMove.push_back(j);
+                     index = mpEnvironment->ComputeJointIndex(jointMove, 4);
+             
+                     // joint strategy by combining policy from agent 0 and agent 1
+                     mJointStrat[state][index] = pi[0][i]*pi[1][j];
+                     
+                     jointMove.clear();
+             }
+     }
+}
+
+void CE_VI::DebugStateIndex()
+{
+	cout << "**DEBUGING INDEX-VECTOR TRANSFORMATION**"<<endl;
+	for (unsigned i = 0; i < mNumStates; i++)// for all states
+		{
+	      	cout << "State " << i<<": ";
+	      	vector <unsigned> state = mpEnvironment->GetFromIndex(i,4,2);
+	      	cout << state[0] << ","<< state[1] << ","<< state[2] << ","<< state[3];
+	      	cout << " -> "<< mpEnvironment->ComputeJointIndex(state,3)<<endl;
+		}
+}
+
+string CE_VI::PrintQTable() {
+	ostringstream str;
+	str << setprecision(6);
+	str << "mJointQTable (size):" << mJointQTable.size() << endl;
+	
+	map<unsigned, map<unsigned, pair <float,float> > >::const_iterator joint_it;
+	//map<float, map<Variable*, unsigned int> >::const_iterator joint_exp_it = mJointExperience.begin();
+	for (joint_it = mJointQTable.begin(); joint_it != mJointQTable.end(); joint_it++) {
+		str << "j[" << joint_it->first << "]:";
+		map<unsigned, pair<float, float> >::const_iterator action_it;
+		//map<Variable*, unsigned int>::const_iterator exp_it = joint_exp_it->second.begin();
+		for (action_it = joint_it->second.begin(); action_it != joint_it->second.end(); action_it++) {
+			str << setw(1) << setprecision(4) << action_it->first << "(" << action_it->second.first << ","<<action_it->second.second << ")|";
+		}
+		str << endl;
+	}
+	return str.str();
+}
+
+string CE_VI::PrintVTable() {
+	vector <unsigned> state;
+	ostringstream str;
+	str << setprecision(6);
+	str << "mJointVTable (size):" << mJointVTable.size() << endl;
+	
+	map<unsigned, pair <float,float> >::const_iterator joint_it;
+	//map<float, map<Variable*, unsigned int> >::const_iterator joint_exp_it = mJointExperience.begin();
+	for (joint_it = mJointVTable.begin(); joint_it != mJointVTable.end(); joint_it++) 
+	{
+		str << "V[" << joint_it->first;
+		state.clear();
+		state = mpEnvironment->GetFromIndex(joint_it->first,4,3);
+		str << ":" << state[0]<<","<< state[1]<<","<< state[2]<<","<< state[3]<<"]";
+		str << setw(1) << setprecision(4) << "(" << joint_it->second.first << ","<<joint_it->second.second << ")|";
+		str << endl;
+	}
+	return str.str();
+}
+
+string CE_VI::PrintJointStrat() {
+	ostringstream str;
+	str << setprecision(6);
+	str << "mJointStrat (size):" << mJointStrat.size() << endl;
+	
+	map <unsigned, map <unsigned, float> >::const_iterator joint_it;
+	//map<float, map<Variable*, unsigned int> >::const_iterator joint_exp_it = mJointExperience.begin();
+	for (joint_it = mJointStrat.begin(); joint_it != mJointStrat.end(); joint_it++) {
+		str << "p[" << joint_it->first << "]:";
+		map<unsigned, float>::const_iterator action_it;
+		//map<Variable*, unsigned int>::const_iterator exp_it = joint_exp_it->second.begin();
+		for (action_it = joint_it->second.begin(); action_it != joint_it->second.end(); action_it++) {
+			str << setw(1) << setprecision(4) << action_it->first << "(" <<action_it->second<< ")|";
+		}
+		str << endl;
+	}
+	return str.str();
+}
+
+string CE_VI::DebugDynamics(vector <unsigned> state, vector <unsigned> actions)
+{
+	ostringstream str;
+	str << "state: " << state[0] << ","<< state[1] << ","<< state[2] << ","<< state[3] <<endl;
+	str << "actions: " <<actions[0]<< ","<<actions[1]<<  endl;
+	return str.str();
+}
+
+void CE_VI::LPsolve()
+{
+/*	LPX *lp;
+      int ia[1+1000], ja[1+1000];
+      double ar[1+1000], Z, x1, x2, x3;
+s1:   lp = lpx_create_prob();
+s2:   lpx_set_prob_name(lp, "jointPolicy");
+s3:   lpx_set_obj_dir(lp, LPX_MAX);
+s4:   lpx_add_rows(lp, 3);
+s5:   lpx_set_row_name(lp, 1, "p");
+s6:   lpx_set_row_bnds(lp, 1, LPX_UP, 0.0, 100.0);
+s7:   lpx_set_row_name(lp, 2, "q");
+s8:   lpx_set_row_bnds(lp, 2, LPX_UP, 0.0, 600.0);
+s9:   lpx_set_row_name(lp, 3, "r");
+s10:  lpx_set_row_bnds(lp, 3, LPX_UP, 0.0, 300.0);
+s11:  lpx_add_cols(lp, 3);
+s12:  lpx_set_col_name(lp, 1, "x1");
+s13:  lpx_set_col_bnds(lp, 1, LPX_LO, 0.0, 0.0);
+s14:  lpx_set_obj_coef(lp, 1, 10.0);
+s15:  lpx_set_col_name(lp, 2, "x2");
+s16:  lpx_set_col_bnds(lp, 2, LPX_LO, 0.0, 0.0);
+s17:  lpx_set_obj_coef(lp, 2, 6.0);
+s18:  lpx_set_col_name(lp, 3, "x3");
+s19:  lpx_set_col_bnds(lp, 3, LPX_LO, 0.0, 0.0);
+s20:  lpx_set_obj_coef(lp, 3, 4.0);
+s21:  ia[1] = 1, ja[1] = 1, ar[1] =  1.0; 
+s22:  ia[2] = 1, ja[2] = 2, ar[2] =  1.0; 
+s23:  ia[3] = 1, ja[3] = 3, ar[3] =  1.0; 
+s24:  ia[4] = 2, ja[4] = 1, ar[4] = 10.0; 
+s25:  ia[5] = 3, ja[5] = 1, ar[5] =  2.0; 
+s26:  ia[6] = 2, ja[6] = 2, ar[6] =  4.0;
+s27:  ia[7] = 3, ja[7] = 2, ar[7] =  2.0; 
+s28:  ia[8] = 2, ja[8] = 3, ar[8] =  5.0; 
+s29:  ia[9] = 3, ja[9] = 3, ar[9] =  6.0; 
+s30:  lpx_load_matrix(lp, 9, ia, ja, ar);
+s31:  lpx_simplex(lp);
+s32:  Z = lpx_get_obj_val(lp);
+s33:  x1 = lpx_get_col_prim(lp, 1);
+s34:  x2 = lpx_get_col_prim(lp, 2);
+s35:  x3 = lpx_get_col_prim(lp, 3);
+s36:  printf("\nZ = %g; x1 = %g; x2 = %g; x3 = %g\n", Z, x1, x2, x3);
+s37:  lpx_delete_prob(lp);
+      //return 0;*/
+}

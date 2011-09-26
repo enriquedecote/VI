@@ -1,0 +1,108 @@
+#include <iostream>
+#include <iomanip>
+#include <sstream>
+#include <cmath>
+#include <fstream>
+#include "../include/CE_VI.h"
+
+using namespace std;
+
+CE_VI::CE_VI(string name,
+	     unsigned int pos,
+	     unsigned int numAgents,
+	     VariablesInfo*const admissibleActions,
+	     float discountFactor,
+	     float maxReward,
+	     bool isVerbose,
+	     Environment* environment) : VI(name,
+					    pos,
+					    numAgents,
+					    admissibleActions,
+					    discountFactor,
+					    maxReward,
+					    isVerbose,
+					    environment) {
+ 	mDiscountFactor = mdiscountFactor;
+
+}
+
+void CE_VI::UpdateInitialValues() {
+	/* Settare i valori iniziali di
+	 * 	mJointPayoff
+	 * 	mJointPayoffStdDev
+	 * 	mJointQTable
+	 * 	mJointExperience
+	 * per OGNI possibile valore dello stato. Max valore dello stato: suppongo che 
+	 * tutti gli "a" agenti siano nelle ultime "a" celle
+	 * Detto
+	 * 	* v = valore cella occupata dall'agente i (all'inizio i = 0)
+	 * 	* n = n° tot celle
+	 *  * a = n° tot agenti
+	 * --> val max = v*n^(i) + v*n^(i+1) + v*n^(i+2) + ... + v*n^(a-1)
+	 */
+	Sgi::hash_map<int, Variable*> actions;
+	mAdmissibleActions->GetVariableList(actions);
+	Sgi::hash_map<int, Variable*>::iterator it_actions;
+	Variable* action = NULL;
+	Sgi::hash_map<int, Variable*> state;
+	VariablesInfo* stateDescription = mEnvironment->GetPartialStateDescription();
+	stateDescription->GetVariableList(state);
+	Sgi::hash_map<int, Variable*>::iterator it_state = state.begin();
+	unsigned environmentSize = (unsigned) it_state->second->GetVarValue();
+	unsigned i;
+	mMaxStateValue = 0;
+	float initialValue = mMaxReward / (1.0 - mDiscountFactor);
+	for (i = 0; i < mNumAgents; i++) {
+		mMaxStateValue+= (environmentSize-mNumAgents+i)*powf((float) environmentSize,(float) i);
+	}
+	cout << "CE_VI::UpdateInitialValues --> max state size = " << mMaxStateValue << endl; flush(cout);
+	for (i = 0, it_actions = actions.begin(); i <= (unsigned) mMaxStateValue; i++, it_actions = actions.begin()) {
+		while (it_actions != actions.end()) {
+			action = it_actions->second;
+			mJointPayoff[i][action] = mMaxReward;
+			mJointPayoffStdDev[i][action] = 0.0;
+			mJointQTable[i][action] = initialValue;
+			mJointExperience[i][action] = 0;
+			it_actions++;
+		}
+	}
+}
+
+CE_VI::~CE_VI () {
+	cout << "CE_VI::~CE_VI" << endl;
+}
+
+void CE_VI::Update(float payoff, VariablesInfo* stateDescription) {
+	if (true == mIsVerbose)
+		*mpPayoffFile << "+" << mName << ": " << payoff << endl;
+	mPreviousPayoff = mCurrentPayoff;
+	mCurrentPayoff = payoff;
+	// compute the indexes for the current and the previous joint action
+	// the index for the previous joint action has been already computed in the action selection phase
+	mCurrentStateIndex = ComputeJointIndex(stateDescription);
+	// compute the highest expected payoff from the current state on
+	ComputeBestPayoff(mCurrentBestPayoff, mJointQTable[mCurrentStateIndex]);
+	//Variable* action_temp = NULL; // it seems to be unused
+	//ComputeBestAction(*&action_temp, mCurrentBestPayoff, mJointQTable[mCurrentStateIndex]);
+	float value = 0.0;
+	//cout << endl << "\tCE_VI::Update --> aggiorno valore in posizione [" << mPreviousStateIndex << "][" << mCurrentAction->GetVarValue() << "] -- value = ";
+ 
+	//	mLearningRate = mInitialNonStationaryLearningRate/(1.0+mJointExperience[mPreviousStateIndex][mCurrentAction]*mDecreasingRate);
+	
+	// update the old Q-value according to the instant payoff and the highest expected payoff with the specified learning rate
+	if (true == mIsVerbose)
+	  //	(*mpAlphaFile) << mLearningRate << endl;
+	UpdateValue(&value, payoff, mCurrentBestPayoff);
+	mJointQTable[mPreviousStateIndex][mCurrentAction] = value;
+	//cout << value;
+	mJointExperience[mPreviousStateIndex][mCurrentAction]++;
+	mPreviousPayoff = payoff;
+	mSteps++;
+ 
+}
+
+void CE_VI::UpdateValue (float* rNewValue,  float payoff,  float bestValue) {
+  //if (learningRate <= 0.0)
+  //	learningRate = mLearningRate;
+  *rNewValue = 0;//(1-learningRate)*(*rNewValue) + learningRate*(payoff + mDiscountFactor*bestValue);
+}
